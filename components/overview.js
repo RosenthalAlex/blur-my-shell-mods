@@ -3,7 +3,36 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Background from 'resource:///org/gnome/shell/ui/background.js';
 
 import { WorkspaceAnimationController } from 'resource:///org/gnome/shell/ui/workspaceAnimation.js';
+import { WorkspaceBackground } from 'resource:///org/gnome/shell/ui/workspace.js';
 const wac_proto = WorkspaceAnimationController.prototype;
+const wsbg_proto = WorkspaceBackground.prototype;
+
+/// Scales the theme's shadow of an overview workspace with the overview transition, so that it
+/// fades in and out instead of appearing at once around the full-screen workspace.
+function fade_workspace_shadow(background) {
+    if (!background.get_stage() || !background._stateAdjustment)
+        return;
+
+    if (background._bms_base_shadow === undefined) {
+        background.set_style(null);
+        const shadow = background.get_theme_node().get_box_shadow();
+        background._bms_base_shadow = shadow ? {
+            x: shadow.xoffset, y: shadow.yoffset, blur: shadow.blur, spread: shadow.spread,
+            r: shadow.color.red, g: shadow.color.green, b: shadow.color.blue,
+            a: shadow.color.alpha / 255,
+        } : null;
+    }
+
+    const base = background._bms_base_shadow;
+    if (!base)
+        return;
+
+    const progress = Math.min(1, Math.max(0, background._stateAdjustment.value));
+    background.set_style(
+        `box-shadow: ${base.x}px ${base.y}px ${base.blur}px ${base.spread}px ` +
+        `rgba(${base.r}, ${base.g}, ${base.b}, ${(base.a * progress).toFixed(3)});`
+    );
+}
 
 import { Pipeline } from '../pipelines/pipeline.js';
 import { get_component_style, connect_system_style_changes } from '../conveniences/style.js';
@@ -67,6 +96,38 @@ export const OverviewBlur = class OverviewBlur {
 
         this.patch_workspace_switch();
         this.follow_overview_animation();
+        this.patch_workspace_shadow();
+    }
+
+    patch_workspace_shadow() {
+        if (this._original_UpdateBorderRadius)
+            return;
+        const original = wsbg_proto._updateBorderRadius;
+        this._original_UpdateBorderRadius = original;
+        this._patched_UpdateBorderRadius = function (...params) {
+            const result = original.apply(this, params);
+            fade_workspace_shadow(this);
+            return result;
+        };
+        wsbg_proto._updateBorderRadius = this._patched_UpdateBorderRadius;
+    }
+
+    restore_workspace_shadow() {
+        if (!this._original_UpdateBorderRadius)
+            return;
+        if (wsbg_proto._updateBorderRadius === this._patched_UpdateBorderRadius)
+            wsbg_proto._updateBorderRadius = this._original_UpdateBorderRadius;
+        this._original_UpdateBorderRadius = null;
+        this._patched_UpdateBorderRadius = null;
+
+        const walk = actor => {
+            if (actor instanceof WorkspaceBackground) {
+                actor.set_style(null);
+                delete actor._bms_base_shadow;
+            }
+            actor.get_children().forEach(walk);
+        };
+        walk(Main.layoutManager.overviewGroup);
     }
 
     /// Fades the blurred background with the overview transition (0: desktop, 1: overview).
@@ -249,6 +310,7 @@ export const OverviewBlur = class OverviewBlur {
         this.enabled = false;
         this.finish_workspace_switch();
         this.restore_patched_proto();
+        this.restore_workspace_shadow();
 
         this.remove_background_actors();
         this.overview_background_group.destroy();
