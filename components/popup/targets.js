@@ -9,6 +9,11 @@ const POPUP_TARGET_STYLE_CLASSES = [
 ];
 const POPUP_CHILD_STYLE_CLASSES = ['osd-window', 'resize-popup', 'switcher-list', 'workspace-switcher', 'modal-dialog', 'run-dialog', 'clipboard-dialog'];
 const POPUP_DESCENDANT_TARGET_STYLE_CLASSES = ['switcher-list'];
+// with `quick-settings-tiles`, the quick settings panel is not blurred as a whole: its tiles are
+const QUICK_SETTINGS_TILE_STYLE_CLASSES = ['quick-toggle-has-menu', 'quick-toggle', 'quick-slider'];
+const QUICK_SETTINGS_SYSTEM_ITEM = 'quick-settings-system-item';
+/// Tiles are pills or circles: the corner shader limits the radius to half the tile size.
+export const TILE_CORNER_RADIUS = { key: null, property: null, value: 9999 };
 
 export const POPUP_BACKGROUND_STYLES = ['bms-popup-background-transparent', 'bms-popup-background-light', 'bms-popup-background-dark'];
 export const POPUP_SURFACE_STYLES = POPUP_BACKGROUND_STYLES.map(
@@ -74,8 +79,25 @@ export const POPUP_CORNER_RADII = [
 ];
 
 export const PopupBlurTargets = class PopupBlurTargets {
-    constructor() {
+    constructor(settings = null) {
+        this.settings = settings;
         this.style_cache = null;
+    }
+
+    get tiles_mode() {
+        return Boolean(this.settings?.popup.QUICK_SETTINGS_TILES);
+    }
+
+    is_quick_settings_tile(actor) {
+        if (!this.tiles_mode || !(actor instanceof St.Widget))
+            return false;
+        if (this.has_any_style_class(actor, QUICK_SETTINGS_TILE_STYLE_CLASSES))
+            return true;
+        // the round buttons of the top row (screenshot, settings, lock, power...)
+        return this.has_any_style_class(actor, ['icon-button', 'power-item'])
+            && this.has_any_style_class(actor.get_parent(), [QUICK_SETTINGS_SYSTEM_ITEM])
+            || this.has_any_style_class(actor, ['icon-button', 'power-item'])
+            && this.has_any_style_class(actor.get_parent()?.get_parent(), [QUICK_SETTINGS_SYSTEM_ITEM]);
     }
 
     find(actor) {
@@ -95,7 +117,9 @@ export const PopupBlurTargets = class PopupBlurTargets {
         }
 
         const box = actor._delegate?.box;
-        if (this.has_any_style_class(box, POPUP_TARGET_STYLE_CLASSES))
+        if (this.tiles_mode && this.has_any_style_class(box, ['quick-settings']))
+            this.find_target_children(box, targets);
+        else if (this.has_any_style_class(box, POPUP_TARGET_STYLE_CLASSES))
             targets.add(box);
 
         if (this.is_blur_target_actor(actor))
@@ -158,15 +182,21 @@ export const PopupBlurTargets = class PopupBlurTargets {
     }
 
     prefers_descendant_targets(actor) {
-        return this.has_any_style_class(actor, POPUP_DESCENDANT_TARGET_STYLE_CLASSES);
+        return this.has_any_style_class(actor, POPUP_DESCENDANT_TARGET_STYLE_CLASSES)
+            || this.tiles_mode && this.has_any_style_class(actor, ['quick-settings']);
     }
 
     is_blur_target_actor(actor) {
+        if (this.tiles_mode && this.has_any_style_class(actor, ['quick-settings']))
+            return false;
         return this.has_any_style_class(actor, POPUP_TARGET_STYLE_CLASSES)
-            || this.has_any_style_class(actor, POPUP_CHILD_STYLE_CLASSES);
+            || this.has_any_style_class(actor, POPUP_CHILD_STYLE_CLASSES)
+            || this.is_quick_settings_tile(actor);
     }
 
     get_corner_radius(target, root_actor) {
+        if (this.is_quick_settings_tile(target))
+            return TILE_CORNER_RADIUS;
         return POPUP_CORNER_RADII.find(radius =>
             has_any_style_class(target, radius.style_classes)
             || has_any_style_class(root_actor, radius.style_classes)

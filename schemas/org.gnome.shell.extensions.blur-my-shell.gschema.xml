@@ -466,6 +466,11 @@
             <default>12</default>
             <summary>Radius for input method candidate popup corner rounding</summary>
         </key>
+        <!-- QUICK SETTINGS TILES -->
+        <key type="b" name="quick-settings-tiles">
+            <default>false</default>
+            <summary>Blur each quick settings tile instead of the whole quick settings panel</summary>
+        </key>
         <!-- QUICK SETTINGS CORNER RADIUS -->
         <key type="i" name="quick-settings-corner-radius">
             <default>36</default>
