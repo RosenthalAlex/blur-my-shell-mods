@@ -3,7 +3,7 @@ import Gio from 'gi://Gio';
 import Shell from 'gi://Shell';
 
 /// Delay before the first look at a window, so that the client has drawn its real content.
-const FIRST_CHECK_DELAY_MS = 600;
+const FIRST_CHECK_DELAY_MS = 300;
 /// A window found opaque is looked at once more, for clients that draw their content late.
 const LATE_CHECK_DELAY_MS = 3000;
 /// Resizing an opaque window can reveal translucent parts (e.g. a sidebar appearing).
@@ -13,8 +13,8 @@ const MAX_RESIZE_CHECKS = 3;
 const FOCUS_CHECK_DELAY_MS = 400;
 const MAX_FOCUS_CHECKS = 2;
 /// Retries while the window cannot be painted yet (no actor, not mapped...).
-const MAX_CAPTURE_RETRIES = 5;
-const RETRY_DELAY_MS = 1000;
+const MAX_CAPTURE_RETRIES = 10;
+const RETRY_DELAY_MS = 200;
 
 /// A pixel counts as translucent below this alpha.
 const ALPHA_THRESHOLD = 250;
@@ -24,6 +24,12 @@ const TRANSLUCENT_RATIO = 0.01;
 const EDGE_MARGIN = 24;
 /// Roughly how many pixels are sampled per window.
 const TARGET_SAMPLES = 40000;
+
+/// Applications found translucent once are remembered (by WM class), so that their next windows
+/// are blurred from the first frame instead of after the detection delay.
+const KNOWN_APPS_FILE = GLib.build_filenamev(
+    [GLib.get_user_cache_dir(), 'blur-my-shell', 'translucent-apps.json']
+);
 
 export const Transparency = {
     UNKNOWN: 0,
@@ -41,6 +47,7 @@ export class TransparencyDetector {
         this._records = new Map();
         // captures are done one after the other, to avoid spikes when many windows appear
         this._queue = Promise.resolve();
+        this._known_apps = load_known_apps();
     }
 
     state(meta_window) {
@@ -48,7 +55,8 @@ export class TransparencyDetector {
     }
 
     is_translucent(meta_window) {
-        return this.state(meta_window) === Transparency.TRANSLUCENT;
+        return this.state(meta_window) === Transparency.TRANSLUCENT
+            || this._known_apps.has(meta_window.get_wm_class());
     }
 
     /// Starts looking at a window, if not already done. Idempotent.
@@ -106,6 +114,19 @@ export class TransparencyDetector {
         [...this._records.keys()].forEach(meta_window => this.forget(meta_window));
     }
 
+    _remember(wm_class) {
+        if (!wm_class || this._known_apps.has(wm_class))
+            return;
+
+        this._known_apps.add(wm_class);
+        try {
+            GLib.mkdir_with_parents(GLib.path_get_dirname(KNOWN_APPS_FILE), 0o755);
+            GLib.file_set_contents(KNOWN_APPS_FILE, JSON.stringify([...this._known_apps]));
+        } catch (e) {
+            this._log(`could not save the translucent applications: ${e}`);
+        }
+    }
+
     _schedule(meta_window, record, delay) {
         if (record.timeout_id)
             GLib.source_remove(record.timeout_id);
@@ -120,7 +141,9 @@ export class TransparencyDetector {
     }
 
     async _check(meta_window, record) {
-        if (record.destroyed || record.state === Transparency.TRANSLUCENT)
+        // remembered applications are blurred right away, no need to look at them
+        if (record.destroyed || record.state === Transparency.TRANSLUCENT
+            || this._known_apps.has(meta_window.get_wm_class()))
             return;
 
         const result = await this._measure(meta_window);
@@ -136,6 +159,8 @@ export class TransparencyDetector {
 
         const changed = result !== record.state;
         record.state = result;
+        if (result === Transparency.TRANSLUCENT)
+            this._remember(meta_window.get_wm_class());
         this._log(`${meta_window.get_wm_class()}: ${result === Transparency.TRANSLUCENT ? 'translucent' : 'opaque'}`);
 
         if (result === Transparency.OPAQUE && !record.late_check_done) {
@@ -201,6 +226,18 @@ export class TransparencyDetector {
 
         return sample_alpha(pixbuf, frame_in_texture) ? Transparency.TRANSLUCENT : Transparency.OPAQUE;
     }
+}
+
+function load_known_apps() {
+    try {
+        const [, contents] = GLib.file_get_contents(KNOWN_APPS_FILE);
+        const list = JSON.parse(new TextDecoder().decode(contents));
+        if (Array.isArray(list))
+            return new Set(list.filter(item => typeof item === 'string'));
+    } catch (_) {
+        // no file yet, or unreadable: start from scratch
+    }
+    return new Set();
 }
 
 /// Returns whether enough sampled pixels of the frame area of the pixbuf are translucent.
