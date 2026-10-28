@@ -1,5 +1,6 @@
 import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as Background from 'resource:///org/gnome/shell/ui/background.js';
 
 import { WorkspaceAnimationController } from 'resource:///org/gnome/shell/ui/workspaceAnimation.js';
 const wac_proto = WorkspaceAnimationController.prototype;
@@ -23,6 +24,8 @@ export const OverviewBlur = class OverviewBlur {
         this.overview_background_group = null;
         this.animation_background_managers = [];
         this.animation_background_group = null;
+        this.sharp_background_group = null;
+        this.sharp_background_managers = [];
         this.enabled = false;
         this.proto_patched = false;
         this.patch_generation = 0;
@@ -42,6 +45,11 @@ export const OverviewBlur = class OverviewBlur {
         this.animation_background_group = new Meta.BackgroundGroup(
             { name: 'bms-animation-backgroundgroup' }
         );
+        // the sharp wallpaper under the blur, so that the blur can fade in and out with the
+        // overview animation instead of covering everything outside the workspace at once
+        this.sharp_background_group = new Meta.BackgroundGroup(
+            { name: 'bms-overview-sharp-backgroundgroup' }
+        );
 
         Main.uiGroup.add_style_class_name("blurred-overview");
 
@@ -58,6 +66,22 @@ export const OverviewBlur = class OverviewBlur {
         });
 
         this.patch_workspace_switch();
+        this.follow_overview_animation();
+    }
+
+    /// Fades the blurred background with the overview transition (0: desktop, 1: overview).
+    follow_overview_animation() {
+        const adjustment = Main.overview._overview?.controls?._stateAdjustment;
+        if (!adjustment)
+            return;
+
+        const update = () => {
+            if (this.overview_background_group)
+                this.overview_background_group.opacity =
+                    Math.round(Math.min(1, Math.max(0, adjustment.value)) * 255);
+        };
+        this.connections.connect(adjustment, 'notify::value', update);
+        update();
     }
 
     patch_workspace_switch() {
@@ -134,10 +158,21 @@ export const OverviewBlur = class OverviewBlur {
                 'bms-animation-blurred-widget'
             ));
         }
-        Main.layoutManager.overviewGroup.insert_child_at_index(this.overview_background_group, 0);
-        this.connections.connect(Main.layoutManager.overviewGroup, "child-added", (_, child) => {
-            if (child !== this.overview_background_group)
-                Main.layoutManager.overviewGroup.set_child_at_index(this.overview_background_group, 0);
+        for (let i = 0; i < Main.layoutManager.monitors.length; i++) {
+            this.sharp_background_managers.push(new Background.BackgroundManager({
+                container: this.sharp_background_group,
+                monitorIndex: i,
+                vignette: false,
+            }));
+        }
+        const group = Main.layoutManager.overviewGroup;
+        group.insert_child_at_index(this.sharp_background_group, 0);
+        group.insert_child_above(this.overview_background_group, this.sharp_background_group);
+        this.connections.connect(group, "child-added", (_, child) => {
+            if (child !== this.overview_background_group && child !== this.sharp_background_group) {
+                group.set_child_at_index(this.sharp_background_group, 0);
+                group.set_child_at_index(this.overview_background_group, 1);
+            }
         });
     }
 
@@ -183,6 +218,10 @@ export const OverviewBlur = class OverviewBlur {
         this.connections.disconnect_all_for(Main.layoutManager.overviewGroup);
         if (this.overview_background_group.get_parent())
             Main.layoutManager.overviewGroup.remove_child(this.overview_background_group);
+        if (this.sharp_background_group?.get_parent())
+            Main.layoutManager.overviewGroup.remove_child(this.sharp_background_group);
+        this.sharp_background_managers.forEach(manager => manager.destroy());
+        this.sharp_background_managers = [];
 
         this.overview_background_managers.forEach(background_manager =>
             this.destroy_background(background_manager)
@@ -216,6 +255,8 @@ export const OverviewBlur = class OverviewBlur {
         this.overview_background_group = null;
         this.animation_background_group.destroy();
         this.animation_background_group = null;
+        this.sharp_background_group.destroy();
+        this.sharp_background_group = null;
 
         Main.uiGroup.remove_style_class_name("blurred-overview");
         OVERVIEW_COMPONENTS_STYLE.forEach(
