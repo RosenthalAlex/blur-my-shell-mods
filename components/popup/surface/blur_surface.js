@@ -332,7 +332,7 @@ export const PopupBlurSurface = class PopupBlurSurface {
     }
 
     get_corner_radius() {
-        return this.corner_radius.value ?? this.settings.popup[this.corner_radius.property];
+        return this.settings.popup[this.corner_radius.property];
     }
 
     is_visible() {

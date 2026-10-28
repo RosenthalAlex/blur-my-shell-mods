@@ -1,0 +1,104 @@
+// Shows a popup blur only behind the quick settings tiles (union of rounded rects).
+uniform sampler2D tex;
+uniform float texture_x;
+uniform float texture_y;
+uniform float texture_width;
+uniform float texture_height;
+uniform float tile_count;
+uniform float t0x;
+uniform float t0y;
+uniform float t0w;
+uniform float t0h;
+uniform float t1x;
+uniform float t1y;
+uniform float t1w;
+uniform float t1h;
+uniform float t2x;
+uniform float t2y;
+uniform float t2w;
+uniform float t2h;
+uniform float t3x;
+uniform float t3y;
+uniform float t3w;
+uniform float t3h;
+uniform float t4x;
+uniform float t4y;
+uniform float t4w;
+uniform float t4h;
+uniform float t5x;
+uniform float t5y;
+uniform float t5w;
+uniform float t5h;
+uniform float t6x;
+uniform float t6y;
+uniform float t6w;
+uniform float t6h;
+uniform float t7x;
+uniform float t7y;
+uniform float t7w;
+uniform float t7h;
+uniform float t8x;
+uniform float t8y;
+uniform float t8w;
+uniform float t8h;
+uniform float t9x;
+uniform float t9y;
+uniform float t9w;
+uniform float t9h;
+uniform float t10x;
+uniform float t10y;
+uniform float t10w;
+uniform float t10h;
+uniform float t11x;
+uniform float t11y;
+uniform float t11w;
+uniform float t11h;
+uniform float t12x;
+uniform float t12y;
+uniform float t12w;
+uniform float t12h;
+uniform float t13x;
+uniform float t13y;
+uniform float t13w;
+uniform float t13h;
+uniform float t14x;
+uniform float t14y;
+uniform float t14w;
+uniform float t14h;
+uniform float t15x;
+uniform float t15y;
+uniform float t15w;
+uniform float t15h;
+
+float tile_distance(vec2 p, float x, float y, float w, float h) {
+    vec2 size = vec2(w, h);
+    float radius = min(w, h) * 0.5;
+    vec2 q = abs(p - vec2(x, y) - size * 0.5) - size * 0.5 + radius;
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+}
+
+void main(void) {
+    vec2 uv = cogl_tex_coord_in[0].xy;
+    vec2 p = vec2(texture_x, texture_y) + uv * vec2(texture_width, texture_height);
+    float d = 1e6;
+    if (tile_count > 0.5) d = min(d, tile_distance(p, t0x, t0y, t0w, t0h));
+    if (tile_count > 1.5) d = min(d, tile_distance(p, t1x, t1y, t1w, t1h));
+    if (tile_count > 2.5) d = min(d, tile_distance(p, t2x, t2y, t2w, t2h));
+    if (tile_count > 3.5) d = min(d, tile_distance(p, t3x, t3y, t3w, t3h));
+    if (tile_count > 4.5) d = min(d, tile_distance(p, t4x, t4y, t4w, t4h));
+    if (tile_count > 5.5) d = min(d, tile_distance(p, t5x, t5y, t5w, t5h));
+    if (tile_count > 6.5) d = min(d, tile_distance(p, t6x, t6y, t6w, t6h));
+    if (tile_count > 7.5) d = min(d, tile_distance(p, t7x, t7y, t7w, t7h));
+    if (tile_count > 8.5) d = min(d, tile_distance(p, t8x, t8y, t8w, t8h));
+    if (tile_count > 9.5) d = min(d, tile_distance(p, t9x, t9y, t9w, t9h));
+    if (tile_count > 10.5) d = min(d, tile_distance(p, t10x, t10y, t10w, t10h));
+    if (tile_count > 11.5) d = min(d, tile_distance(p, t11x, t11y, t11w, t11h));
+    if (tile_count > 12.5) d = min(d, tile_distance(p, t12x, t12y, t12w, t12h));
+    if (tile_count > 13.5) d = min(d, tile_distance(p, t13x, t13y, t13w, t13h));
+    if (tile_count > 14.5) d = min(d, tile_distance(p, t14x, t14y, t14w, t14h));
+    if (tile_count > 15.5) d = min(d, tile_distance(p, t15x, t15y, t15w, t15h));
+
+    // keep the blur only inside the tiles (pills and circles); premultiplied alpha
+    float inside = 1.0 - smoothstep(-0.5, 0.5, d);
+    cogl_color_out = bms_texture2D(tex, uv) * inside;
+}

@@ -12,6 +12,7 @@ import {
     PopupBlurTargets,
 } from './targets.js';
 import { PopupBlurSurface } from './surface/blur_surface.js';
+import { TileMaskEffect } from './tile_mask.js';
 import { PopupBlurMessageStacks } from './message_stacks.js';
 
 const KEYBOARD_STYLE_CLASS = 'bms-keyboard-surface';
@@ -208,8 +209,23 @@ export const PopupBlur = class PopupBlur {
             () => this.destroy_blur(target)
         );
 
-        if (surface.enable())
+        if (surface.enable()) {
             this.surfaces.set(target, surface);
+            this.mask_quick_settings_tiles(surface, target);
+        }
+    }
+
+    /// With `quick-settings-tiles`, the quick settings blur is only shown behind its tiles: one
+    /// masked blur instead of one blur per tile, which would be far more expensive to paint.
+    mask_quick_settings_tiles(surface, target) {
+        if (!this.settings.popup.QUICK_SETTINGS_TILES || !has_style_class(target, 'quick-settings'))
+            return;
+        const blur_actor = surface.blur_actor;
+        if (!blur_actor)
+            return;
+        const effect = new TileMaskEffect();
+        effect.set_box(target);
+        blur_actor.add_effect_with_name('bms-quick-settings-tile-mask', effect);
     }
 
     destroy_blurred_ancestors(target) {
