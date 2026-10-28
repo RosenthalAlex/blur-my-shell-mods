@@ -8,6 +8,7 @@ import { is_desktop_window } from '../../conveniences/window.js';
 import { DynamicPipeline } from '../../render/dynamic_surface.js';
 import { RoundedPipeline } from '../../render/rounded_pipeline.js';
 import { WindowRules } from './window_rules.js';
+import { TransparencyDetector } from './transparency_detector.js';
 import { BLUR_ACTOR_NAME, WindowOpacity } from './window_opacity.js';
 import { compute_scale, place_dynamic_blur, place_static_blur } from './window_geometry.js';
 import { finish_preview_fade } from './overview_drag.js';
@@ -22,6 +23,13 @@ export const ApplicationsBlur = class ApplicationsBlur {
         this.blur_signal_ids = new Map();
 
         this.rules = new WindowRules(settings);
+        this.detector = new TransparencyDetector(
+            meta_window => {
+                if (this.meta_windows.has(meta_window))
+                    this.check_blur(meta_window);
+            },
+            str => this._log(str)
+        );
         this.window_opacity = new WindowOpacity();
         this.enabled = false;
 
@@ -285,11 +293,21 @@ export const ApplicationsBlur = class ApplicationsBlur {
 
     /// Adds or removes the blur of a tracked window, following the window rules.
     check_blur(meta_window) {
-        if (!is_desktop_window(meta_window) && this.rules.matches(meta_window)) {
+        const wanted = !is_desktop_window(meta_window) && this.rules.matches(meta_window);
+        // with auto-detection, only windows with translucent parts are blurred: the blur behind
+        // an opaque window is never visible, but costs as much to render
+        const pending = wanted && this.rules.uses_auto_detect()
+            && !this.detector.is_translucent(meta_window);
+
+        if (wanted && !pending) {
             if (!meta_window.blur_actor)
                 this.create_blur_effect(meta_window);
-        } else if (meta_window.blur_actor) {
-            this.remove_blur(meta_window);
+        } else {
+            // the blur must be removed before looking at the window, as it would hide its alpha
+            if (meta_window.blur_actor)
+                this.remove_blur(meta_window);
+            if (pending)
+                this.detector.watch(meta_window);
         }
     }
 
@@ -479,6 +497,7 @@ export const ApplicationsBlur = class ApplicationsBlur {
     /// would cause havoc by having untracked windows during normal operations,
     /// which is not the point at all!
     untrack_meta_window(meta_window) {
+        this.detector.forget(meta_window);
         this.remove_blur(meta_window);
         this.connections.disconnect_all_for(meta_window);
         this.meta_windows.delete(meta_window);

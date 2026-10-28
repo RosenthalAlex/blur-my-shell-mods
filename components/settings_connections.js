@@ -140,6 +140,10 @@ export function connect_component_settings(extension) {
         applications,
         () => applications.update_all_windows()
     ));
+    connect(settings.applications, 'AUTO_DETECT', when_enabled(
+        applications,
+        () => applications.update_all_windows()
+    ));
     connect(settings.applications, 'WHITELIST', when_enabled(
         applications,
         () => {

@@ -62,6 +62,7 @@ export const KEYS = [
             { type: Type.B, name: "blur-on-overview" },
             { type: Type.B, name: "unblur-when-fullscreen" },
             { type: Type.B, name: "enable-all" },
+            { type: Type.B, name: "auto-detect" },
             { type: Type.AS, name: "whitelist" },
             { type: Type.AS, name: "blacklist" },
         ]

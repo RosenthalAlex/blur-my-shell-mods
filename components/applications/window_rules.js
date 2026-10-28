@@ -31,6 +31,11 @@ export class WindowRules {
         this.blacklist = this.settings.applications.BLACKLIST.map(wildcard_to_regex);
     }
 
+    /// Whether the windows matched with `enable-all` must also be found translucent to be blurred.
+    uses_auto_detect() {
+        return this.settings.applications.ENABLE_ALL && this.settings.applications.AUTO_DETECT;
+    }
+
     matches(meta_window) {
         const wm_class = meta_window.get_wm_class();
         const listed = this.settings.applications.ENABLE_ALL

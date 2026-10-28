@@ -189,6 +189,21 @@ This may cause some latency or performance issues.</property>
             </child>
           </object>
         </child>
+
+        <child>
+          <object class="AdwActionRow" id="auto_detect_row">
+            <property name="title" translatable="yes">Only windows with transparency</property>
+            <property name="subtitle" translatable="yes">Looks at each window once and blurs it only if parts of it are translucent. The blur behind opaque windows is never visible but costs as much.</property>
+            <property name="activatable-widget">auto_detect</property>
+            <property name="sensitive" bind-source="blur" bind-property="state" bind-flags="sync-create" />
+
+            <child>
+              <object class="GtkSwitch" id="auto_detect">
+                <property name="valign">center</property>
+              </object>
+            </child>
+          </object>
+        </child>
       </object>
     </child>
 

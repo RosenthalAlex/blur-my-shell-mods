@@ -326,6 +326,11 @@
             <default>false</default>
             <summary>Whether or not to blur all applications by default</summary>
         </key>
+        <!-- AUTO DETECT -->
+        <key type="b" name="auto-detect">
+            <default>false</default>
+            <summary>Whether to blur only the windows that have translucent parts, when blurring all applications</summary>
+        </key>
         <!-- WHITELIST -->
         <key type="as" name="whitelist">
             <default>[]</default>

@@ -41,6 +41,8 @@ export const Applications = GObject.registerClass({
         'blur_on_overview',
         'unblur_when_fullscreen',
         'enable_all',
+        'auto_detect_row',
+        'auto_detect',
         'whitelist',
         'add_window_whitelist',
         'blacklist',
@@ -104,6 +106,15 @@ export const Applications = GObject.registerClass({
         this.preferences.applications.settings.bind(
             'corner-when-maximized', this._corner_when_maximized, 'active',
             Gio.SettingsBindFlags.DEFAULT
+        );
+
+        this.preferences.applications.settings.bind(
+            'auto-detect', this._auto_detect, 'active',
+            Gio.SettingsBindFlags.DEFAULT
+        );
+        this._enable_all.bind_property(
+            'active', this._auto_detect_row, 'visible',
+            GObject.BindingFlags.SYNC_CREATE
         );
 
         this._enable_all.bind_property(
